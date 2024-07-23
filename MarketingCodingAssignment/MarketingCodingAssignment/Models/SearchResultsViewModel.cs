@@ -11,6 +11,12 @@
         { 
             get; set; 
         }
+        public List<string> Suggestions { get; set; }
+        public SearchResultsViewModel()
+        {
+            Films = new List<FilmLuceneRecord>();
+            Suggestions = new List<string>();
+        }
 
     }
 }

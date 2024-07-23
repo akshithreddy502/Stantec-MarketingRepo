@@ -1,0 +1,71 @@
+/* styles.css */
+
+/* General Styles */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 15px;
+}
+
+/* Header Styles */
+.main-header {
+    background-color: #3498db;
+    color: white;
+    padding: 15px 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.header-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.logo img {
+    height: 50px;
+}
+
+.title h1 {
+    margin: 0;
+    font-size: 24px;
+}
+
+.rebuild-index .btn {
+    background-color: #e74c3c;
+    color: white;
+    padding: 10px 15px;
+    text-decoration: none;
+    border-radius: 5px;
+    transition: background-color 0.3s;
+}
+
+    .rebuild-index .btn:hover {
+        background-color: #c0392b;
+    }
+
+/* Responsive Styles */
+@media (max-width: 768px) {
+    .header-content {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .logo img {
+        margin-bottom: 10px;
+    }
+
+    .title h1 {
+        font-size: 20px;
+    }
+
+    .rebuild-index .btn {
+        padding: 8px 12px;
+        font-size: 14px;
+    }
+}

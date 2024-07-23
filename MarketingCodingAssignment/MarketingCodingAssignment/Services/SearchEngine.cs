@@ -12,6 +12,9 @@ using CsvHelper;
 using CsvHelper.Configuration;
 using Lucene.Net.Analysis.En;
 using Directory = System.IO.Directory;
+using System.IO;
+using System.Collections.Generic;
+using Lucene.Net.Search.Spell;
 
 namespace MarketingCodingAssignment.Services
 {
@@ -21,6 +24,7 @@ namespace MarketingCodingAssignment.Services
 
         private const LuceneVersion AppLuceneVersion = LuceneVersion.LUCENE_48;
         private readonly string _indexPath;
+        private SpellChecker _spellChecker;
 
         public SearchEngine()
         {
@@ -34,6 +38,21 @@ namespace MarketingCodingAssignment.Services
             {
                 Directory.CreateDirectory(_indexPath);
             }
+
+            // Initialize the spell checker
+            InitializeSpellChecker();
+        }
+        // Method to initialize the SpellChecker
+        private void InitializeSpellChecker()
+        {
+            var spellCheckerDir = FSDirectory.Open(Path.Combine(_indexPath, "spellchecker"));
+            _spellChecker = new SpellChecker(spellCheckerDir);
+
+            // Populate the spell checker dictionary with terms from the index
+            var indexDir = FSDirectory.Open(_indexPath);
+            using var reader = DirectoryReader.Open(indexDir);
+            var dictionary = new LuceneDictionary(reader, "CombinedText");
+            _spellChecker.IndexDictionary(dictionary, new IndexWriterConfig(AppLuceneVersion, new StandardAnalyzer(AppLuceneVersion)), true);
         }
 
         public List<FilmCsvRecord> ReadFilmsFromCsv()
@@ -181,6 +200,12 @@ namespace MarketingCodingAssignment.Services
                 RecordsCount = hits.TotalHits,
                 Films = films.ToList()
             };
+            // Highlight: Spell checking if no results found
+            if (searchResults.RecordsCount == 0)
+            {
+                var suggestions = GetSpellCheckSuggestions(searchString);
+                searchResults.Suggestions = suggestions;
+            }
 
             return searchResults;
         }
@@ -270,6 +295,29 @@ namespace MarketingCodingAssignment.Services
             }
 
             return suggestions;
+        }
+
+        // Method to get spell check suggestions
+        public List<string> GetSpellCheckSuggestions(string searchString, int maxSuggestions = 5)
+        {
+            List<string> suggestions = new();
+
+            var words = searchString.ToLowerInvariant().Split(' ');
+
+            foreach (var word in words)
+            {
+                string[] suggestWords = _spellChecker.SuggestSimilar(word, maxSuggestions);
+                if (suggestWords.Length > 0)
+                {
+                    suggestions.AddRange(suggestWords);
+                }
+                else
+                {
+                    suggestions.Add(word); // Add the original word if no suggestions are found
+                }
+            }
+
+            return suggestions.Distinct().ToList();
         }
 
 
