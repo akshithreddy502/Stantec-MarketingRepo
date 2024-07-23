@@ -70,6 +70,62 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
 
     <script>
+        function showSuggestions(value) {
+            if (value.length === 0) {
+                closeAllLists();
+                return;
+            }
+
+            $.ajax({
+                type: "get",
+                url: "/home/autocomplete?term=" + encodeURIComponent(value),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (data) {
+                    closeAllLists();
+                    var autocompleteList = document.getElementById("autocomplete-list");
+                    if (!autocompleteList) {
+                        autocompleteList = document.createElement("div");
+                        autocompleteList.setAttribute("id", "autocomplete-list");
+                        autocompleteList.setAttribute("class", "autocomplete-items");
+                        document.querySelector(".autocomplete").appendChild(autocompleteList);
+                    }
+                    for (var i = 0; i < data.length; i++) {
+                        var item = document.createElement("div");
+                        item.innerHTML = "<strong>" + data[i].substr(0, value.length) + "</strong>";
+                        item.innerHTML += data[i].substr(value.length);
+                        item.innerHTML += "<input type='hidden' value='" + data[i] + "'>";
+
+                        item.addEventListener("click", function (e) {
+                            document.getElementById("searchtext").value = this.getElementsByTagName("input")[0].value;
+                            closeAllLists();
+                        });
+
+                        autocompleteList.appendChild(item);
+                    }
+                },
+                failure: function (data) {
+                    console.error("Failed to fetch autocomplete suggestions");
+                },
+                error: function (data) {
+                    console.error("Error fetching autocomplete suggestions");
+                }
+            });
+        }
+
+        function closeAllLists(element) {
+            var items = document.getElementsByClassName("autocomplete-items");
+            for (var i = 0; i < items.length; i++) {
+                if (element != items[i] && element != document.getElementById("searchtext")) {
+                    items[i].parentNode.removeChild(items[i]);
+                }
+            }
+        }
+
+        document.addEventListener("click", function (e) {
+            closeAllLists(e.target);
+        });
+        document.addEventListener('DOMContentLoaded', function () {
 
         function showLoadingOverlay() {
             $(".loading-overlay").fadeIn();
@@ -109,7 +165,7 @@
             updateSearch();
         }
 
-        $("#durationMinimumFacet, #durationMaximumFacet, #voteAverageMinimumFacet").on("change", function () {
+        $("#durationMinimumFacet, #durationMaximumFacet, #voteAverageMinimumFacet,#releaseDateStart,#releaseDateEnd").on("change", function () {
             updateSearchAndResetCount();
         });
         updateSearchAndResetCount();
@@ -124,7 +180,9 @@
                 data: {
                     voteAverageMinimum: document.getElementById("voteAverageMinimumFacet").value,
                     durationMinimum: document.getElementById("durationMinimumFacet").value,
-                    durationMaximum: document.getElementById("durationMaximumFacet").value
+                    durationMaximum: document.getElementById("durationMaximumFacet").value,
+                    releaseDateStart: document.getElementById("releaseDateStart").value,
+                    releaseDateEnd: document.getElementById("releaseDateEnd").value
                 },
                 success: function (ajaxResponse) {
                     console.log(ajaxResponse);
@@ -172,6 +230,7 @@
 
                 if (item.releaseDate) lines.push("<div>Initially released " + new Date(item.releaseDate).toLocaleDateString() + "</div>");
                 if (item.overview) lines.push("<div class='overview'>" + item.overview + "</div>");
+                if (item.voteAverage) lines.push("<div>Vote Average: " + item.voteAverage.toFixed(1) + "</div>");
                 lines.push("</div>");
                 lines.push("</div>");
             }
@@ -206,6 +265,10 @@
         document.addEventListener('DOMContentLoaded', function () {
             hideLoadingOverlay();
         }, false);
+          
+
+               hideLoadingOverlay();
+        });
 
     </script>
 
@@ -217,7 +280,7 @@
 <div style="max-width: 50em; margin: 0 auto">
     <div class="autocomplete" style="margin-bottom:10px">
         <div class="input-group">
-            <input id="searchtext" type="search" name="searchtext" placeholder="Type something and press the search button" class="form-control" autocomplete="off">
+            <input id="searchtext" type="search" name="searchtext" placeholder="Type something and press the search button" class="form-control" autocomplete="off" onkeyup="showSuggestions(this.value)">
             <span class="input-group-btn">
                 <button id="searchbutton" class="btn btn-default" title="Search">
                     <span class="material-symbols-outlined">
@@ -226,6 +289,7 @@
                 </button>
             </span>
         </div>
+        <div id="autocomplete-list" class="autocomplete-items"></div>
     </div>
     <div class="form-group">
         <div style="display:inline-block;">
@@ -267,6 +331,17 @@
                 <option value="10.0">10.0</option>
             </select>
         </div>
+        <div class="form-group">
+            <div style="display:inline-block;">
+                <label for="releaseDateStart">Release Date (Start)</label>
+                <input type="date" id="releaseDateStart" class="form-control" style="display: block; width: 150px" />
+            </div>
+            <div style="display:inline-block;">
+                <label for="releaseDateEnd">Release Date (End)</label>
+                <input type="date" id="releaseDateEnd" class="form-control" style="display: block; width: 150px" />
+            </div>
+        </div>
+
     </div>
     <div id="results-count" style="margin-top: 30px">
         <span>

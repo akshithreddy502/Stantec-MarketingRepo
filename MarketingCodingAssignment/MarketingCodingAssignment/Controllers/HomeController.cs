@@ -28,10 +28,12 @@ namespace MarketingCodingAssignment.Controllers
         }
 
         [HttpGet]
-        public JsonResult Search(string searchString, int start, int rows, int? durationMinimum, int? durationMaximum, double? voteAverageMinimum)
+        public JsonResult Search(string searchString, int start, int rows, int? durationMinimum, int? durationMaximum, double? voteAverageMinimum, DateTime? releaseDateStart, DateTime? releaseDateEnd)
         {
-            SearchResultsViewModel searchResults = _searchEngine.Search(searchString, start, rows, durationMinimum, durationMaximum, voteAverageMinimum);
-            return Json(new {searchResults});
+            //SearchResultsViewModel searchResults = _searchEngine.Search(searchString, start, rows, durationMinimum, durationMaximum, voteAverageMinimum);
+            var searchResults = _searchEngine.Search(searchString, start, rows, durationMinimum, durationMaximum, voteAverageMinimum,releaseDateStart,releaseDateEnd);
+            return Json(new { searchResults });
+           // return Json(new {searchResults});
         }
 
         public ActionResult ReloadIndex()
@@ -54,6 +56,12 @@ namespace MarketingCodingAssignment.Controllers
             _searchEngine.PopulateIndexFromCsv();
             return;
         }
+        [HttpGet]
+        public JsonResult Autocomplete(string term, int maxSuggestions = 10)        {
+            List<string> suggestions = _searchEngine.GetAutocompleteSuggestions(term, maxSuggestions);
+            return Json(suggestions);
+        }
+
 
     }
 }
