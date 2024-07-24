@@ -45,99 +45,161 @@ namespace MarketingCodingAssignment.Services
         // Method to initialize the SpellChecker
         private void InitializeSpellChecker()
         {
-            var spellCheckerDir = FSDirectory.Open(Path.Combine(_indexPath, "spellchecker"));
-            _spellChecker = new SpellChecker(spellCheckerDir);
+            try
+            {
+                var spellCheckerDir = FSDirectory.Open(Path.Combine(_indexPath, "spellchecker"));
+                _spellChecker = new SpellChecker(spellCheckerDir);
 
-            // Populate the spell checker dictionary with terms from the index
-            var indexDir = FSDirectory.Open(_indexPath);
-            using var reader = DirectoryReader.Open(indexDir);
-            var dictionary = new LuceneDictionary(reader, "CombinedText");
-            _spellChecker.IndexDictionary(dictionary, new IndexWriterConfig(AppLuceneVersion, new StandardAnalyzer(AppLuceneVersion)), true);
+                // Populate the spell checker dictionary with terms from the index
+                var indexDir = FSDirectory.Open(_indexPath);
+                using var reader = DirectoryReader.Open(indexDir);
+                var dictionary = new LuceneDictionary(reader, "CombinedText");
+                _spellChecker.IndexDictionary(dictionary, new IndexWriterConfig(AppLuceneVersion, new StandardAnalyzer(AppLuceneVersion)), true);
+            }
+            catch (Exception ex)
+            {
+                // Log the exception (this is just an example, use your logging mechanism)
+                Console.WriteLine($"An error occurred while initializing the SpellChecker: {ex.Message}");
+                // Optionally, you can rethrow the exception if you want to handle it further up the call stack
+                // throw;
+            }
         }
 
+        // Method to read films from CSV
         public List<FilmCsvRecord> ReadFilmsFromCsv()
         {
-            List<FilmCsvRecord> records = new();
-            string filePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "csv", "FilmsInfo.csv");
-            if (!File.Exists(filePath))
+            try
             {
-                throw new FileNotFoundException("CSV file not found", filePath);
-            }
-            using (StreamReader reader = new(filePath))
-            using (CsvReader csv = new(reader, new CsvConfiguration(CultureInfo.InvariantCulture)))
-            {
-                records = csv.GetRecords<FilmCsvRecord>().ToList();
+                List<FilmCsvRecord> records = new();
+                string filePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "csv", "FilmsInfo.csv");
 
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException("CSV file not found", filePath);
+                }
+
+                using (StreamReader reader = new(filePath))
+                using (CsvReader csv = new(reader, new CsvConfiguration(CultureInfo.InvariantCulture)))
+                {
+                    records = csv.GetRecords<FilmCsvRecord>().ToList();
+                }
+
+                if (records == null || records.Count == 0)
+                {
+                    throw new InvalidOperationException("The CSV file is empty or could not be read.");
+                }
+
+                return records;
             }
-            using (StreamReader r = new(filePath))
+            catch (FileNotFoundException fnfEx)
             {
-                string csvFileText = r.ReadToEnd();
+                // Log the file not found exception
+                Console.WriteLine($"File not found: {fnfEx.Message}");
+                // Optionally, you can rethrow the exception if you want to handle it further up the call stack
+                // throw;
             }
-            return records;
+            catch (Exception ex)
+            {
+                // Log the exception (this is just an example, use your logging mechanism)
+                Console.WriteLine($"An error occurred while reading films from CSV: {ex.Message}");
+                // Optionally, you can rethrow the exception if you want to handle it further up the call stack
+                // throw;
+            }
+
+            return new List<FilmCsvRecord>(); // Return an empty list if an exception occurs
         }
+
 
         // Read the data from the csv and feed it into the lucene index
         public void PopulateIndexFromCsv()
         {
-            // Get the list of films from the csv file
-            var csvFilms = ReadFilmsFromCsv();
-
-            // Convert to Lucene format
-            List<FilmLuceneRecord> luceneFilms = csvFilms.Select(x => new FilmLuceneRecord
+            try
             {
-                Id = x.Id,
-                Title = x.Title,
-                Overview = x.Overview,
-                Runtime = int.TryParse(x.Runtime, out int parsedRuntime) ? parsedRuntime : 0,
-                Tagline = x.Tagline,
-                Revenue = long.TryParse(x.Revenue, out long parsedRevenue) ? parsedRevenue : 0,
-                VoteAverage = double.TryParse(x.VoteAverage, out double parsedVoteAverage) ? parsedVoteAverage : 0,
-                ReleaseDate= DateTime.TryParse(x.ReleaseDate, out DateTime parsedReleaseDate) ? parsedReleaseDate : (DateTime?)null  // Added release date
-            }).ToList();
+                // Get the list of films from the csv file
+                var csvFilms = ReadFilmsFromCsv();
 
-            // Write the records to the lucene index
-            PopulateIndex(luceneFilms);
+                if (csvFilms == null || csvFilms.Count == 0)
+                {
+                    throw new InvalidOperationException("The CSV file is empty or could not be read.");
+                }
 
-            return;
+                // Convert to Lucene format
+                List<FilmLuceneRecord> luceneFilms = csvFilms.Select(x => new FilmLuceneRecord
+                {
+                    Id = x?.Id ?? string.Empty,
+                    Title = x?.Title ?? string.Empty,
+                    Overview = x?.Overview ?? string.Empty,
+                    Runtime = int.TryParse(x?.Runtime, out int parsedRuntime) ? parsedRuntime : 0,
+                    Tagline = x?.Tagline ?? string.Empty,
+                    Revenue = long.TryParse(x?.Revenue, out long parsedRevenue) ? parsedRevenue : 0,
+                    VoteAverage = double.TryParse(x?.VoteAverage, out double parsedVoteAverage) ? parsedVoteAverage : 0,
+                    ReleaseDate = DateTime.TryParse(x?.ReleaseDate, out DateTime parsedReleaseDate) ? parsedReleaseDate : (DateTime?)null  // Added release date
+                }).ToList();
+
+                // Write the records to the lucene index
+                PopulateIndex(luceneFilms);
+            }
+            catch (Exception ex)
+            {              
+                Console.WriteLine($"An error occurred while populating the index from CSV: {ex.Message}");
+              
+            }
         }
+
 
         public void PopulateIndex(List<FilmLuceneRecord> films)
         {
-            using FSDirectory dir = FSDirectory.Open(_indexPath);
-
-            // Create an analyzer to process the text
-            Analyzer analyzer = new CustomAnalyzer();
-
-            // Create an index writer
-            IndexWriterConfig indexConfig = new IndexWriterConfig(AppLuceneVersion, analyzer);
-            using IndexWriter writer = new IndexWriter(dir, indexConfig);
-
-            //Add to the index
-            foreach (var film in films)
+            try
             {
-                Document doc = new()
+                if (films == null || films.Count == 0)
                 {
-                    new StringField("Id", film.Id, Field.Store.YES),
-                    new TextField("Title", film.Title, Field.Store.YES),
-                    new TextField("Overview", film.Overview, Field.Store.YES),
-                    new Int32Field("Runtime", film.Runtime, Field.Store.YES),
-                    new TextField("Tagline", film.Tagline, Field.Store.YES),
-                    new Int64Field("Revenue", film.Revenue ?? 0, Field.Store.YES),
-                    new DoubleField("VoteAverage", film.VoteAverage ?? 0.0, Field.Store.YES),
-                    new TextField("CombinedText", film.Title + " " + film.Tagline + " " + film.Overview, Field.Store.NO)
-                };
-                if (film.ReleaseDate.HasValue)
-                {
-                    doc.Add(new StringField("ReleaseDate", film.ReleaseDate.Value.ToString("yyyyMMdd"), Field.Store.YES));  // Added release date
+                    throw new ArgumentNullException(nameof(films), "The film list cannot be null or empty.");
                 }
-                writer.AddDocument(doc);
+
+                using FSDirectory dir = FSDirectory.Open(_indexPath);
+
+                // Create an analyzer to process the text
+                Analyzer analyzer = new CustomAnalyzer();
+
+                // Create an index writer
+                IndexWriterConfig indexConfig = new IndexWriterConfig(AppLuceneVersion, analyzer);
+                using IndexWriter writer = new IndexWriter(dir, indexConfig);
+
+                // Add to the index
+                foreach (var film in films)
+                {
+                    if (film == null)
+                    {
+                        continue; // Skip null entries in the list
+                    }
+
+                    Document doc = new()
+            {
+                new StringField("Id", film.Id ?? string.Empty, Field.Store.YES),
+                new TextField("Title", film.Title ?? string.Empty, Field.Store.YES),
+                new TextField("Overview", film.Overview ?? string.Empty, Field.Store.YES),
+                new Int32Field("Runtime", film.Runtime, Field.Store.YES),
+                new TextField("Tagline", film.Tagline ?? string.Empty, Field.Store.YES),
+                new Int64Field("Revenue", film.Revenue ?? 0, Field.Store.YES),
+                new DoubleField("VoteAverage", film.VoteAverage ?? 0.0, Field.Store.YES),
+                new TextField("CombinedText", (film.Title + " " + film.Tagline + " " + film.Overview) ?? string.Empty, Field.Store.NO)
+            };
+                    if (film.ReleaseDate.HasValue)
+                    {
+                        doc.Add(new StringField("ReleaseDate", film.ReleaseDate.Value.ToString("yyyyMMdd"), Field.Store.YES));  // Added release date
+                    }
+                    writer.AddDocument(doc);
+                }
+
+                writer.Flush(triggerMerge: false, applyAllDeletes: false);
+                writer.Commit();
             }
-
-            writer.Flush(triggerMerge: false, applyAllDeletes: false);
-            writer.Commit();
-
-           return;
+            catch (Exception ex)
+            {              
+                Console.WriteLine($"An error occurred during index population: {ex.Message}");             
+            }
         }
+
 
         public void DeleteIndex()
         {
@@ -158,140 +220,188 @@ namespace MarketingCodingAssignment.Services
         }
         public SearchResultsViewModel Search(string searchString, int startPage, int rowsPerPage, int? durationMinimum, int? durationMaximum, double? voteAverageMinimum, DateTime? releaseDateStart, DateTime? releaseDateEnd)
         {
-            if (!IndexExists()) {
-                PopulateIndexFromCsv();
-                    }
-            using FSDirectory dir = FSDirectory.Open(_indexPath);
-            using DirectoryReader reader = DirectoryReader.Open(dir);
-            IndexSearcher searcher = new(reader);
+            SearchResultsViewModel searchResults = new();
 
-            int hitsLimit = 1000;
-            TopScoreDocCollector collector = TopScoreDocCollector.Create(hitsLimit, true);
-
-            var query = this.GetLuceneQuery(searchString, durationMinimum, durationMaximum, voteAverageMinimum, releaseDateStart,  releaseDateEnd);
-
-            searcher.Search(query, collector);
-
-            int startIndex = (startPage) * rowsPerPage;
-            TopDocs hits = collector.GetTopDocs(startIndex, rowsPerPage);
-            ScoreDoc[] scoreDocs = hits.ScoreDocs;
-
-            List<FilmLuceneRecord> films = new();
-            foreach (ScoreDoc? hit in scoreDocs)
+            try
             {
-                Document foundDoc = searcher.Doc(hit.Doc);
-                FilmLuceneRecord film = new()
+                if (!IndexExists())
                 {
-                    Id = foundDoc.Get("Id").ToString(),
-                    Title = foundDoc.Get("Title").ToString(),
-                    Overview = foundDoc.Get("Overview").ToString(),
-                    Runtime = int.TryParse(foundDoc.Get("Runtime"), out int parsedRuntime) ? parsedRuntime : 0,
-                    Tagline = foundDoc.Get("Tagline").ToString(),
-                    Revenue = long.TryParse(foundDoc.Get("Revenue"), out long parsedRevenue) ? parsedRevenue : 0,
-                    VoteAverage =  double.TryParse(foundDoc.Get("VoteAverage"), out double parsedVoteAverage) ? parsedVoteAverage : 0.0,
-                    ReleaseDate = DateTime.TryParseExact(foundDoc.Get("ReleaseDate"), "yyyyMMdd", null, DateTimeStyles.None, out DateTime parsedReleaseDate) ? parsedReleaseDate : (DateTime?)null,  // Added release date
-                    Score = hit.Score
-                };
-                films.Add(film);
-            }
+                    PopulateIndexFromCsv();
+                }
 
-            SearchResultsViewModel searchResults = new()
+                using FSDirectory dir = FSDirectory.Open(_indexPath);
+                using DirectoryReader reader = DirectoryReader.Open(dir);
+                IndexSearcher searcher = new(reader);
+
+                int hitsLimit = 1000;
+                TopScoreDocCollector collector = TopScoreDocCollector.Create(hitsLimit, true);
+
+                var query = this.GetLuceneQuery(searchString, durationMinimum, durationMaximum, voteAverageMinimum, releaseDateStart, releaseDateEnd);
+
+                searcher.Search(query, collector);
+
+                int startIndex = (startPage) * rowsPerPage;
+                TopDocs hits = collector.GetTopDocs(startIndex, rowsPerPage);
+                ScoreDoc[] scoreDocs = hits.ScoreDocs;
+
+                List<FilmLuceneRecord> films = new();
+                foreach (ScoreDoc? hit in scoreDocs)
+                {
+                    Document foundDoc = searcher.Doc(hit.Doc);
+                    FilmLuceneRecord film = new()
+                    {
+                        Id = foundDoc.Get("Id")?.ToString(),
+                        Title = foundDoc.Get("Title")?.ToString(),
+                        Overview = foundDoc.Get("Overview")?.ToString(),
+                        Runtime = int.TryParse(foundDoc.Get("Runtime"), out int parsedRuntime) ? parsedRuntime : 0,
+                        Tagline = foundDoc.Get("Tagline")?.ToString(),
+                        Revenue = long.TryParse(foundDoc.Get("Revenue"), out long parsedRevenue) ? parsedRevenue : 0,
+                        VoteAverage = double.TryParse(foundDoc.Get("VoteAverage"), out double parsedVoteAverage) ? parsedVoteAverage : 0.0,
+                        ReleaseDate = DateTime.TryParseExact(foundDoc.Get("ReleaseDate"), "yyyyMMdd", null, DateTimeStyles.None, out DateTime parsedReleaseDate) ? parsedReleaseDate : (DateTime?)null,
+                        Score = hit.Score
+                    };
+                    films.Add(film);
+                }
+
+                searchResults = new SearchResultsViewModel
+                {
+                    RecordsCount = hits.TotalHits,
+                    Films = films.ToList()
+                };
+
+                // Spell checking if no results found
+                if (searchResults.RecordsCount == 0)
+                {
+                    var suggestions = GetSpellCheckSuggestions(searchString);
+                    searchResults.Suggestions = suggestions;
+                }
+            }
+            catch (Exception ex)
             {
-                RecordsCount = hits.TotalHits,
-                Films = films.ToList()
-            };
-            // Highlight: Spell checking if no results found
-            if (searchResults.RecordsCount == 0)
-            {
-                var suggestions = GetSpellCheckSuggestions(searchString);
-                searchResults.Suggestions = suggestions;
+                Console.WriteLine($"An error occurred during search: {ex.Message}");
+               
             }
 
             return searchResults;
         }
+
         private Query GetLuceneQuery(string searchString, int? durationMinimum, int? durationMaximum, double? voteAverageMinimum, DateTime? releaseDateStart, DateTime? releaseDateEnd)
         {
             BooleanQuery bq = new BooleanQuery();
 
-            if (!string.IsNullOrWhiteSpace(searchString))
+            try
             {
-                var analyzer = new CustomAnalyzer(); // Use CustomAnalyzer here
-                var tokenStream = analyzer.GetTokenStream("CombinedText", new System.IO.StringReader(searchString));
-                var termAttr = tokenStream.AddAttribute<Lucene.Net.Analysis.TokenAttributes.ICharTermAttribute>();
-                tokenStream.Reset();
-
-                while (tokenStream.IncrementToken())
+                if (!string.IsNullOrWhiteSpace(searchString))
                 {
-                    var term = termAttr.ToString();
-                    var termQuery = new TermQuery(new Term("CombinedText", term));
-                    bq.Add(termQuery, Occur.MUST);
+                    var analyzer = new CustomAnalyzer(); // Use CustomAnalyzer here
+                    using var tokenStream = analyzer.GetTokenStream("CombinedText", new System.IO.StringReader(searchString));
+                    var termAttr = tokenStream.AddAttribute<Lucene.Net.Analysis.TokenAttributes.ICharTermAttribute>();
+                    tokenStream.Reset();
+
+                    while (tokenStream.IncrementToken())
+                    {
+                        var term = termAttr.ToString();
+                        if (!string.IsNullOrWhiteSpace(term))
+                        {
+                            var termQuery = new TermQuery(new Term("CombinedText", term));
+                            bq.Add(termQuery, Occur.MUST);
+                        }
+                    }
+
+                    tokenStream.End();
                 }
-                tokenStream.End();
-                tokenStream.Dispose();
-            }
 
-            if (durationMaximum.HasValue || durationMinimum.HasValue)
-            {
-                Query rq = NumericRangeQuery.NewInt32Range("Runtime", durationMinimum, durationMaximum, true, true);
-                bq.Add(rq, Occur.MUST);
-            }
-            if (voteAverageMinimum.HasValue)
-            {
-                Query vaq = NumericRangeQuery.NewDoubleRange("VoteAverage", voteAverageMinimum, 10.0, true, true);
-                bq.Add(vaq, Occur.MUST);
-            }
-            if (releaseDateStart.HasValue || releaseDateEnd.HasValue)
-            {
-                string start = releaseDateStart.HasValue ? releaseDateStart.Value.ToString("yyyyMMdd") : null;
-                string end = releaseDateEnd.HasValue ? releaseDateEnd.Value.ToString("yyyyMMdd") : null;
-                Query rdq = TermRangeQuery.NewStringRange("ReleaseDate", start, end, true, true);
-                bq.Add(rdq, Occur.MUST);
-            }
-            if (string.IsNullOrWhiteSpace(searchString) && bq.Clauses.Count == 0)
-            {
-                // If there's no search string, just return everything.
-                return new MatchAllDocsQuery();
-            }
+                if (durationMaximum.HasValue || durationMinimum.HasValue)
+                {
+                    Query rq = NumericRangeQuery.NewInt32Range("Runtime", durationMinimum, durationMaximum, true, true);
+                    bq.Add(rq, Occur.MUST);
+                }
 
+                if (voteAverageMinimum.HasValue)
+                {
+                    Query vaq = NumericRangeQuery.NewDoubleRange("VoteAverage", voteAverageMinimum, 10.0, true, true);
+                    bq.Add(vaq, Occur.MUST);
+                }
+
+                if (releaseDateStart.HasValue || releaseDateEnd.HasValue)
+                {
+                    string start = releaseDateStart.HasValue ? releaseDateStart.Value.ToString("yyyyMMdd") : null;
+                    string end = releaseDateEnd.HasValue ? releaseDateEnd.Value.ToString("yyyyMMdd") : null;
+                    Query rdq = TermRangeQuery.NewStringRange("ReleaseDate", start, end, true, true);
+                    bq.Add(rdq, Occur.MUST);
+                }
+
+                if (string.IsNullOrWhiteSpace(searchString) && bq.Clauses.Count == 0)
+                {
+                    // If there's no search string, just return everything.
+                    return new MatchAllDocsQuery();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An error occurred while creating the Lucene query: {ex.Message}");
+                
+            }
 
             return bq;
         }
 
+
         public List<string> GetAutocompleteSuggestions(string prefix, int maxSuggestions)
         {
-            using FSDirectory dir = FSDirectory.Open(_indexPath);
-            using DirectoryReader reader = DirectoryReader.Open(dir);
-            IndexSearcher searcher = new(reader);
+            List<string> suggestions = new();
 
-            // Split the prefix into separate words
-            var words = prefix.ToLowerInvariant().Split(' ');
-
-            // Create a BooleanQuery to combine multiple PrefixQuery terms
-            BooleanQuery booleanQuery = new BooleanQuery();
-            foreach (var word in words)
+            // Null check for the prefix
+            if (string.IsNullOrWhiteSpace(prefix))
             {
-                var termQuery = new PrefixQuery(new Term("CombinedText", word));
-                booleanQuery.Add(termQuery, Occur.MUST);
+                return suggestions;
             }
 
-            // Create a collector to gather the top scoring documents
-            var collector = TopScoreDocCollector.Create(1000, true); // Increase the initial search limit
-            searcher.Search(booleanQuery, collector);
-
-            TopDocs topDocs = collector.GetTopDocs(0, 1000); // Fetch more results initially
-            ScoreDoc[] scoreDocs = topDocs.ScoreDocs;
-
-            List<string> suggestions = new();
-            foreach (var scoreDoc in scoreDocs)
+            try
             {
-                Document doc = searcher.Doc(scoreDoc.Doc);
-                string title = doc.Get("Title");
-                if (title.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && !suggestions.Contains(title))
+                using FSDirectory dir = FSDirectory.Open(_indexPath);
+                using DirectoryReader reader = DirectoryReader.Open(dir);
+                IndexSearcher searcher = new(reader);
+
+                // Split the prefix into separate words
+                var words = prefix.ToLowerInvariant().Split(' ');
+
+                // Create a BooleanQuery to combine multiple PrefixQuery terms
+                BooleanQuery booleanQuery = new BooleanQuery();
+                foreach (var word in words)
                 {
-                    suggestions.Add(title);
-                    if (suggestions.Count >= maxSuggestions)
-                        break;
+                    // Null or empty word check
+                    if (string.IsNullOrWhiteSpace(word))
+                    {
+                        continue;
+                    }
+
+                    var termQuery = new PrefixQuery(new Term("CombinedText", word));
+                    booleanQuery.Add(termQuery, Occur.MUST);
                 }
+
+                // Create a collector to gather the top scoring documents
+                var collector = TopScoreDocCollector.Create(1000, true); // Increase the initial search limit
+                searcher.Search(booleanQuery, collector);
+
+                TopDocs topDocs = collector.GetTopDocs(0, 1000); // Fetch more results initially
+                ScoreDoc[] scoreDocs = topDocs.ScoreDocs;
+
+                foreach (var scoreDoc in scoreDocs)
+                {
+                    Document doc = searcher.Doc(scoreDoc.Doc);
+                    string title = doc.Get("Title");
+                    if (title != null && title.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && !suggestions.Contains(title))
+                    {
+                        suggestions.Add(title);
+                        if (suggestions.Count >= maxSuggestions)
+                            break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An error occurred while getting autocomplete suggestions: {ex.Message}");
             }
 
             return suggestions;
@@ -302,23 +412,44 @@ namespace MarketingCodingAssignment.Services
         {
             List<string> suggestions = new();
 
-            var words = searchString.ToLowerInvariant().Split(' ');
-
-            foreach (var word in words)
+            // Null check for the searchString
+            if (string.IsNullOrWhiteSpace(searchString))
             {
-                string[] suggestWords = _spellChecker.SuggestSimilar(word, maxSuggestions);
-                if (suggestWords.Length > 0)
+                return suggestions;
+            }
+
+            try
+            {
+                var words = searchString.ToLowerInvariant().Split(' ');
+
+                foreach (var word in words)
                 {
-                    suggestions.AddRange(suggestWords);
+                    // Null or empty word check
+                    if (string.IsNullOrWhiteSpace(word))
+                    {
+                        continue;
+                    }
+
+                    string[] suggestWords = _spellChecker.SuggestSimilar(word, maxSuggestions);
+                    if (suggestWords != null && suggestWords.Length > 0)
+                    {
+                        suggestions.AddRange(suggestWords);
+                    }
+                    else
+                    {
+                        suggestions.Add(word); // Add the original word if no suggestions are found
+                    }
                 }
-                else
-                {
-                    suggestions.Add(word); // Add the original word if no suggestions are found
-                }
+            }
+            catch (Exception ex)
+            {               
+                Console.WriteLine($"An error occurred while getting spell check suggestions: {ex.Message}");
+               
             }
 
             return suggestions.Distinct().ToList();
         }
+
 
 
 
