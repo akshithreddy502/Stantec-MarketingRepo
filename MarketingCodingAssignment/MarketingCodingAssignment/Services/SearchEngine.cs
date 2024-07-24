@@ -24,7 +24,7 @@ namespace MarketingCodingAssignment.Services
 
         private const LuceneVersion AppLuceneVersion = LuceneVersion.LUCENE_48;
         private readonly string _indexPath;
-        private SpellChecker _spellChecker;
+        private SpellChecker? _spellChecker;
 
         public SearchEngine()
         {
